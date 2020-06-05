@@ -5,38 +5,38 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Client {
-    String host = "tcp://comp3310.ddns.net:1883";
-    String clientID = "3310-<u6483085>";
-    String userName = "students";
-    String password = "33106331";
+    private final String HOST = "tcp://comp3310.ddns.net:1883";
+    private final String CLIENT_ID = "3310-<u6483085>";
+    private final String USER_NAME = "students";
+    private final String PASSWORD = "33106331";
 
-    int qos;
-    String topic;
-    int duration;
+    private int QoS;
+    private String TOPIC;
+    private int duration;
 
-    int index = 0;
-    int previous = 0;
-    List<Integer> messages = new ArrayList<>();
-    List<Long> times = new ArrayList<>();
-    List<Integer> indexOfDuplicates = new ArrayList<>();
-    List<Integer> indexOfOutOfOrders = new ArrayList<>();
-    List<Integer> indexOfNotConsecutive = new ArrayList<>();
+    private int index = 0;
+    private int previous = 0;
+    private List<Integer> messages = new ArrayList<>();
+    private List<Long> times = new ArrayList<>();
+    private List<Integer> indexOfDuplicates = new ArrayList<>();
+    private List<Integer> indexOfOutOfOrders = new ArrayList<>();
+    private List<Integer> indexOfNotConsecutive = new ArrayList<>();
 
-    MqttClient client;
-    MqttConnectOptions option;
+    private MqttClient client;
+    private MqttConnectOptions option;
 
-    Client(String topic, int qos, int duration) {
-        this.topic = topic;
-        this.qos = qos;
+    public Client(String TOPIC, int QoS, int duration) {
+        this.TOPIC = TOPIC;
+        this.QoS = QoS;
         this.duration = duration;
     }
 
-    public void read() {
+    public void execute() {
         try {
-            client = new MqttClient(host, clientID, new MemoryPersistence());
+            client = new MqttClient(HOST, CLIENT_ID, new MemoryPersistence());
             option = new MqttConnectOptions();
-            option.setUserName(userName);
-            option.setPassword(password.toCharArray());
+            option.setUserName(USER_NAME);
+            option.setPassword(PASSWORD.toCharArray());
             option.setCleanSession(true);
             option.setConnectionTimeout(10);
             option.setKeepAliveInterval(20);
@@ -44,48 +44,52 @@ public class Client {
             client.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable throwable) {
-                    System.out.println("*****" + topic + " Connection Lost \n");
+                    System.out.println("*****" + TOPIC + " Connection Lost \n");
                 }
 
                 @Override
-                public void messageArrived(String s, MqttMessage mqttMessage) throws Exception {
-                    Integer message = Integer.parseInt(mqttMessage.toString());
-                    if (message - previous != 1) {
-                        indexOfNotConsecutive.add(index);
+                public void messageArrived(String s, MqttMessage mqttMessage) {
+                    if (s.contains("counter")) {
+                    if (isNumber(mqttMessage.toString())) {
+                        Integer message = Integer.parseInt(mqttMessage.toString());
+                        if (message - previous != 1) {
+                            indexOfNotConsecutive.add(index);
+                        }
+                        if (message < previous) {
+                            indexOfOutOfOrders.add(index);
+                        }
+                        if (messages.contains(message)) {
+                            indexOfDuplicates.add(index);
+                        }
+                        previous = message;
+                        messages.add(message);
+                        times.add(System.currentTimeMillis());
+                        index++;
+                        System.out.println("Topic: " + s);
+                        System.out.println("QoS: " + mqttMessage.getQos());
+                        System.out.println("Message: " + message + "\n");
                     }
-                    if (message < previous) {
-                        indexOfOutOfOrders.add(index);
                     }
-                    if (messages.contains(message)) {
-                        indexOfDuplicates.add(index);
-                    }
-                    previous = message;
-                    messages.add(message);
-                    times.add(System.currentTimeMillis());
-                    index++;
-                    System.out.println("Topic: " + s);
-                    System.out.println("QoS: " + mqttMessage.getQos());
-                    System.out.println("Message: " + message + "\n");
                 }
 
                 @Override
                 public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
-                    System.out.println("complete");
+                    System.out.println("Complete");
                 }
             });
             client.connect(option);
-            client.subscribe(topic, qos);
+            client.subscribe(TOPIC, QoS);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    float averageRate;
-    float lossRate;
-    float dupeRate;
-    float oooRate;
-    float mean;
-    double stdVariation;
+    private float averageRate;
+    private float lossRate;
+    private float dupeRate;
+    private float oooRate;
+    private float mean;
+    private double stdVariation;
 
     public void statistic() {
         averageRate = (float) messages.size() / (float) (duration / 1000);
@@ -111,7 +115,7 @@ public class Client {
         }
         stdVariation = Math.sqrt((double) diffSquareSum / (double) validGap.size());
 
-        System.out.println("*****The Statistic of " + topic + ":");
+        System.out.println("*****The Statistic of " + TOPIC + ":");
         System.out.println("Average Rate: " + averageRate + " messages per second");
         System.out.println("Loss Rate: " + lossRate * 100 + "%");
         System.out.println("Duplicate Rate (per 10 seconds): " + dupeRate * 100 + "%");
@@ -120,8 +124,35 @@ public class Client {
         System.out.println("Gap Variation: " + stdVariation + " milliseconds \n");
     }
 
+    public void push() throws MqttException {
+        String topic = "";
+        if (TOPIC.contains("slow")) {
+            topic = "studentreport/u6483085/slow/" + TOPIC.substring(TOPIC.length() - 1) + "/";
+        }
+        if (TOPIC.contains("fast")) {
+            topic = "studentreport/u6483085/fast/" + TOPIC.substring(TOPIC.length() - 1) + "/";
+        }
+        Publish p = new Publish();
+        p.connect();
+        p.publish(topic + "recv", "" + averageRate);
+        p.publish(topic + "loss", "" + lossRate * 100 + "%");
+        p.publish(topic + "dupe", "" + dupeRate * 100 + "%");
+        p.publish(topic + "ooo", "" + oooRate * 100 + "%");
+        p.publish(topic + "gap", "" + mean);
+        p.publish(topic + "gvar", "" + stdVariation);
+        p.disconnect();
+    }
+
     public void disconnect() throws MqttException {
         client.disconnect();
         client.close();
+    }
+
+    private boolean isNumber(String str) {
+        for (int i = 0; i < str.length(); i++) {
+            if (!Character.isDigit(str.charAt(i)))
+                return false;
+        }
+        return true;
     }
 }

@@ -2,29 +2,24 @@ import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 public class Publish {
-    String host = "tcp://comp3310.ddns.net:1883";
-    String clientID = "3310-u6483085";
-    String userName = "students";
-    String password = "33106331";
+    private final String HOST = "tcp://comp3310.ddns.net:1883";
+    private final String CLIENT_ID = "3310-u6483085";
+    private final String USER_NAME = "students";
+    private final String PASSWORD = "33106331";
+    private final int QOS = 2;
+    private final boolean RETAIN_FLAG = true;
 
-    int qos;
-    String topic;
-    String content;
+    private MqttClient client;
 
-    MqttClient client;
-
-    Publish(String topic, int qos, String content) throws MqttException {
-        this.topic = topic;
-        this.qos = qos;
-        this.content = content;
-        client = new MqttClient(host, clientID, new MemoryPersistence());
+    public Publish() throws MqttException {
+        client = new MqttClient(HOST, CLIENT_ID, new MemoryPersistence());
     }
 
     public void connect() {
         MqttConnectOptions option = new MqttConnectOptions();
         option.setCleanSession(true);
-        option.setUserName(userName);
-        option.setPassword(password.toCharArray());
+        option.setUserName(USER_NAME);
+        option.setPassword(PASSWORD.toCharArray());
         option.setConnectionTimeout(10);
         option.setKeepAliveInterval(20);
         client.setCallback(new MqttCallback() {
@@ -34,7 +29,7 @@ public class Publish {
             }
 
             @Override
-            public void messageArrived(String s, MqttMessage mqttMessage) throws Exception {
+            public void messageArrived(String s, MqttMessage mqttMessage) {
 
             }
 
@@ -50,13 +45,11 @@ public class Publish {
         }
     }
 
-    public void publish() throws MqttException {
+    public void publish(String topic, String message) throws MqttException {
         MqttTopic mqttTopic = client.getTopic(topic);
-        MqttDeliveryToken courier = mqttTopic.publish(content.getBytes(), qos, true);
-        courier.waitForCompletion();
-        System.out.println("Publishing on topic: "+ mqttTopic.toString());
-        System.out.println("Message: "+ content);
-        System.out.println("Publish completely");
+        MqttDeliveryToken mqttDeliveryToken = mqttTopic.publish(message.getBytes(), QOS, RETAIN_FLAG);
+        mqttDeliveryToken.waitForCompletion();
+        System.out.println("Topic " + mqttTopic.toString() + " Publish Complete");
     }
 
     public void disconnect() throws MqttException {
